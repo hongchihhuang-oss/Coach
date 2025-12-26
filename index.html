@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>IELTS Coach</title>
+    
+    <!-- PWA Settings for iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="IELTS Coach">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/180/graduation-cap.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            /* iOS Safe Area Support */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        .loader {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid #ffffff;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Animation for results */
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen pb-10 select-none">
+
+    <div class="max-w-xl mx-auto p-4">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6 pt-2">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 text-white p-2 rounded-xl shadow-md shadow-blue-200">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold text-slate-900 tracking-tight leading-none">IELTS Coach</h1>
+                    <p class="text-xs text-blue-600 font-semibold">Gemini 2.5 Flash</p>
+                </div>
+            </div>
+            <!-- Settings Button -->
+            <button onclick="toggleSettings()" class="text-slate-300 hover:text-blue-600 transition p-2">
+                <i class="fa-solid fa-gear"></i>
+            </button>
+        </header>
+
+        <!-- Settings Modal (Hidden by default) -->
+        <div id="settings-panel" class="hidden mb-6 bg-white p-5 rounded-2xl shadow-lg border border-slate-200 animate-slide-up relative z-20">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="font-bold text-slate-800">⚙️ Settings</h3>
+                <button onclick="toggleSettings()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">To use this app on your phone, you need your own API Key.</p>
+            <input type="password" id="api-key-input" placeholder="Paste Gemini API Key here (AIza...)" 
+                class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono">
+            <button onclick="saveApiKey()" class="w-full bg-slate-800 text-white font-bold py-2 rounded-lg hover:bg-slate-700 transition text-sm">
+                Save Key
+            </button>
+            <p class="text-[10px] text-center mt-3 text-slate-400">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline hover:text-blue-500">Get a free key from Google</a>
+            </p>
+        </div>
+
+        <!-- Install Prompt (Hidden by default, shown via JS) -->
+        <div id="ios-install-prompt" class="hidden mb-6 bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3 animate-slide-up">
+            <div class="text-blue-500 text-xl"><i class="fa-brands fa-apple"></i></div>
+            <div class="flex-1">
+                <h3 class="font-bold text-blue-900 text-sm mb-1">Install as App</h3>
+                <p class="text-xs text-blue-800 leading-relaxed">
+                    Tap the <span class="font-bold"><i class="fa-solid fa-arrow-up-from-bracket"></i> Share</span> button in Safari, then select <span class="font-bold"><i class="fa-regular fa-square-plus"></i> Add to Home Screen</span> for the best experience.
+                </p>
+                <button onclick="document.getElementById('ios-install-prompt').remove()" class="text-[10px] text-blue-400 mt-2 underline">Dismiss</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div id="app-content">
+            
+            <!-- Question Card -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+                
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full uppercase tracking-wider">
+                                <i class="fa-solid fa-tag text-[10px]"></i> Topic
+                            </span>
+                            <span id="topic-counter" class="text-[10px] font-mono text-slate-400">#0</span>
+                        </div>
+                        <h2 class="text-lg font-bold leading-tight text-slate-900" id="topic-display">Loading...</h2>
+                    </div>
+                    <button onclick="generateNewTopic()" class="text-slate-400 hover:text-blue-600 transition p-2 bg-slate-50 rounded-full w-8 h-8 flex items-center justify-center">
+                        <i class="fa-solid fa-shuffle text-xs"></i>
+                    </button>
+                </div>
+                
+                <div class="bg-amber-50 rounded-xl p-4 mb-5 border border-amber-100">
+                    <h3 class="text-xs font-bold text-amber-700 uppercase mb-2 flex items-center gap-1">
+                        <i class="fa-solid fa-bullseye"></i> Constraints
+                    </h3>
+                    <ul class="text-sm text-amber-900 space-y-1.5 pl-1" id="constraints-display">
+                        <!-- Constraints injected here -->
+                    </ul>
+                </div>
+
+                <div class="relative">
+                    <textarea id="user-input" rows="3" 
+                        class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-base resize-none shadow-inner"
+                        placeholder="Write your sentence here..."
+                        autocomplete="off" 
+                        autocorrect="off" 
+                        autocapitalize="off" 
+                        spellcheck="false"
+                        data-gramm="false"></textarea>
+                    <div class="absolute bottom-3 right-3 text-xs text-slate-400 pointer-events-none">
+                        <i class="fa-solid fa-pen-nib"></i>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button id="submit-btn" onclick="askGemini()" 
+                        class="w-full bg-blue-600 active:bg-blue-700 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-[0.98] flex justify-center items-center gap-2">
+                        <span>Analyze Sentence</span>
+                        <div id="loader" class="loader hidden"></div>
+                    </button>
+                    <div id="error-msg" class="text-red-500 text-xs mt-3 hidden text-center bg-red-50 p-2 rounded-lg border border-red-100"></div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="result-area" class="hidden space-y-6 pb-12 opacity-0 transition-opacity duration-500">
+                
+                <!-- Score & Issue -->
+                <div class="grid grid-cols-10 gap-3">
+                    <div class="col-span-3 bg-white p-4 rounded-2xl shadow-sm text-center border border-slate-200 flex flex-col justify-center items-center">
+                        <span class="text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1">Band</span>
+                        <span class="text-4xl font-black text-blue-600 leading-none" id="score-display">-</span>
+                    </div>
+                    <div class="col-span-7 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
+                        <span class="text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1 flex items-center gap-1">
+                            <i class="fa-solid fa-stethoscope"></i> Diagnosis
+                        </span>
+                        <p class="text-sm text-slate-800 leading-snug font-medium" id="issue-display">-</p>
+                    </div>
+                </div>
+
+                <!-- Evolution Path -->
+                <div class="space-y-4">
+                    <div class="flex items-center gap-2 px-1">
+                        <div class="h-8 w-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+                            <i class="fa-solid fa-rocket text-sm"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg">Evolution Path</h3>
+                            <p class="text-xs text-slate-500">From Good to Great</p>
+                        </div>
+                    </div>
+                    
+                    <div id="evolution-container" class="space-y-4 relative">
+                        <div class="absolute left-4 top-4 bottom-4 w-0.5 bg-slate-200 -z-10"></div>
+                        <!-- Cards injected here -->
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row gap-3 pt-2">
+                    <button onclick="downloadLog()" 
+                        class="flex-1 py-3.5 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 font-bold text-sm hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition flex justify-center items-center gap-2 group">
+                        <i class="fa-solid fa-download group-hover:animate-bounce"></i>
+                        Save Log
+                    </button>
+                    <button onclick="generateNewTopic()" 
+                        class="flex-1 py-3.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition shadow-lg shadow-slate-200 flex justify-center items-center gap-2 transform active:scale-95">
+                        Next Challenge <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const envApiKey = ""; // Injected by environment (works in preview)
+        
+        // --- API Key Management ---
+        function getEffectiveKey() {
+            // Priority: LocalStorage (User set) > Environment (Preview)
+            return localStorage.getItem('GEMINI_API_KEY') || envApiKey;
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.classList.toggle('hidden');
+            // Pre-fill if exists
+            if (!panel.classList.contains('hidden')) {
+                document.getElementById('api-key-input').value = localStorage.getItem('GEMINI_API_KEY') || '';
+            }
+        }
+
+        function saveApiKey() {
+            const input = document.getElementById('api-key-input');
+            const key = input.value.trim();
+            if (key) {
+                localStorage.setItem('GEMINI_API_KEY', key);
+                alert("Key saved! You can now analyze sentences.");
+                toggleSettings();
+            } else {
+                if(confirm("Clear saved API Key?")) {
+                    localStorage.removeItem('GEMINI_API_KEY');
+                    input.value = '';
+                }
+            }
+        }
+
+        // --- Massive Topics Data (Expanded to ~80) ---
+        const topics = [
+            // 1. Environment & Energy
+            { t: "Should governments ban single-use plastics?", c: ["Passive Voice", "take a toll on"] },
+            { t: "Is nuclear power the solution to climate change?", c: ["Concession (Although)", "double-edged sword"] },
+            { t: "Who is responsible for waste recycling: government or individuals?", c: ["Noun Phrase", "shared responsibility"] },
+            { t: "The impact of deforestation on biodiversity", c: ["Cause & Effect", "irreversible damage"] },
+            { t: "Should air travel be restricted to reduce carbon footprint?", c: ["Conditional (If)", "carbon emissions"] },
+            { t: "The problem of water scarcity in the future", c: ["Future Perfect", "looming crisis"] },
+            { t: "Are electric cars truly eco-friendly?", c: ["Comparison", "sustainable alternative"] },
+            { t: "Should we protect endangered species at all costs?", c: ["Modal Verbs", "ecological balance"] },
+            
+            // 2. Education
+            { t: "Is online learning as effective as traditional classrooms?", c: ["Comparison (While/Whereas)", "pivotal role"] },
+            { t: "Should university education be free for everyone?", c: ["Conditional (Unless)", "financial burden"] },
+            { t: "Is art and music essential in school curriculum?", c: ["Relative Clause", "holistic development"] },
+            { t: "Should students be grouped by ability?", c: ["Passive Voice", "academic performance"] },
+            { t: "The role of teachers in the AI era", c: ["Contrast", "irreplaceable"] },
+            { t: "Is homework necessary for children?", c: ["Opinion", "reinforce learning"] },
+            { t: "Should physical education be mandatory?", c: ["Causative (Make/Let)", "sedentary lifestyle"] },
+            { t: "Gap year: waste of time or valuable experience?", c: ["Either/Or", "broaden horizons"] },
+
+            // 3. Technology
+            { t: "The impact of AI on future employment", c: ["Relative Clause (which)", "job displacement"] },
+            { t: "Do smartphones make us less social?", c: ["Present Perfect", "face-to-face interaction"] },
+            { t: "Should children be allowed to use social media?", c: ["Modal Verbs", "cyberbullying"] },
+            { t: "Is space exploration a waste of money?", c: ["Concession (Despite)", "technological breakthrough"] },
+            { t: "The risks of a cashless society", c: ["Conditional", "privacy concerns"] },
+            { t: "Can robots replace caregivers for the elderly?", c: ["Comparison", "human touch"] },
+            { t: "The influence of video games on youth behavior", c: ["Cause & Effect", "cognitive skills"] },
+            { t: "Should genetic engineering be legalized?", c: ["Passive Voice", "ethical dilemma"] },
+
+            // 4. Health
+            { t: "Should taxes on sugary drinks be increased?", c: ["Causative Verbs", "public health crisis"] },
+            { t: "Who is responsible for obesity: individuals or food companies?", c: ["Noun Phrase", "sedentary lifestyle"] },
+            { t: "Should vaccination be mandatory?", c: ["Conditional", "herd immunity"] },
+            { t: "The importance of mental health awareness", c: ["Inversion (Not only...)", "stigma"] },
+            { t: "Is private healthcare better than public healthcare?", c: ["Comparison", "accessibility"] },
+            { t: "Should smoking be banned in all public places?", c: ["Passive Voice", "second-hand smoke"] },
+            { t: "The effects of fast food on society", c: ["Participle Phrase (-ing)", "obesity epidemic"] },
+            
+            // 5. Work & Business
+            { t: "The challenges of maintaining work-life balance from home", c: ["Conditional (If)", "blur the lines"] },
+            { t: "Is a high salary more important than job satisfaction?", c: ["Comparison", "sense of fulfillment"] },
+            { t: "Should the retirement age be increased?", c: ["Reasoning (Due to)", "aging population"] },
+            { t: "The benefits of a 4-day work week", c: ["Gerund as Subject", "productivity"] },
+            { t: "Is marketing detrimental to society?", c: ["Concession", "consumerism"] },
+            { t: "Should companies hire based on skills or degrees?", c: ["Preference (Rather than)", "practical experience"] },
+            { t: "The impact of international tourism on local businesses", c: ["Relative Clause", "revenue stream"] },
+            
+            // 6. Crime & Law
+            { t: "Is prison the best way to reduce crime?", c: ["Noun Phrase", "deterrent to"] },
+            { t: "Should capital punishment be abolished?", c: ["Passive Voice", "human rights"] },
+            { t: "Is rehabilitation better than punishment?", c: ["Comparison", "reintegrate into society"] },
+            { t: "Should juvenile criminals be treated as adults?", c: ["Conditional", "legal responsibility"] },
+            { t: "Does media violence cause real-life crime?", c: ["Cause & Effect", "correlation"] },
+            { t: "Should police officers carry guns?", c: ["Modal Verbs", "public safety"] },
+            
+            // 7. Government & Society
+            { t: "Should public transport be free for everyone?", c: ["Modal Verbs (should/must)", "alleviate congestion"] },
+            { t: "Is it important for children to learn history?", c: ["Present Perfect", "sense of identity"] },
+            { t: "Should rich countries help poor countries?", c: ["Moral Obligation", "humanitarian aid"] },
+            { t: "The impact of urbanization on quality of life", c: ["Participle Phrase", "overcrowding"] },
+            { t: "Should museums be free of charge?", c: ["Reasoning", "cultural heritage"] },
+            { t: "Is celebrity culture harmful?", c: ["Opinion", "role model"] },
+            { t: "Should voting be mandatory?", c: ["Conditional", "civic duty"] },
+            { t: "The role of libraries in the digital age", c: ["Contrast", "access to information"] },
+
+            // 8. Media & Culture
+            { t: "Does globalisation destroy local culture?", c: ["Complex Sentence", "cultural homogenization"] },
+            { t: "The influence of social media on mental health", c: ["Concession (Although)", "detrimental impact"] },
+            { t: "Should censorship exist in the media?", c: ["Passive Voice", "freedom of speech"] },
+            { t: "Is traditional news media dying?", c: ["Present Continuous", "fake news"] },
+            { t: "The responsibility of influencers", c: ["Relative Clause", "impressionable audience"] },
+            { t: "Should advertisements aimed at children be banned?", c: ["Passive Voice", "exploitation"] },
+
+            // 9. Transport & City
+            { t: "The solution to traffic congestion in cities", c: ["Gerund", "infrastructure"] },
+            { t: "Should cars be banned from city centers?", c: ["Passive Voice", "pedestrian zone"] },
+            { t: "Is living in the city better than the countryside?", c: ["Comparison", "amenities"] },
+            { t: "The future of autonomous vehicles", c: ["Future Tense", "safety concerns"] },
+            
+            // 10. Bonus Random
+            { t: "Is luck a factor in success?", c: ["Opinion", "hard work"] },
+            { t: "Should we explore the ocean or space?", c: ["Preference", "scientific discovery"] },
+            { t: "Is competition good for children?", c: ["Concession", "cooperation"] },
+            { t: "The value of learning a second language", c: ["It is... that...", "cognitive benefits"] },
+            { t: "Should plastic surgery be encouraged?", c: ["Passive Voice", "self-esteem"] },
+            { t: "Is fashion art?", c: ["Definition", "form of expression"] },
+            { t: "Should animals be kept in zoos?", c: ["Passive Voice", "conservation"] },
+            { t: "The impact of fast fashion on the environment", c: ["Cause & Effect", "landfill"] }
+        ];
+        
+        let currentChallenge = null;
+        let analysisResult = null;
+        let lastTopicIndex = -1;
+
+        // --- Core Logic ---
+        function generateNewTopic() {
+            let rnd;
+            // Prevent same topic appearing consecutively
+            do {
+                rnd = Math.floor(Math.random() * topics.length);
+            } while (rnd === lastTopicIndex && topics.length > 1);
+            
+            lastTopicIndex = rnd;
+            const t = topics[rnd];
+            
+            currentChallenge = {
+                topic: t.t,
+                question: `Write a sentence about: ${t.t}`,
+                constraints: t.c,
+                index: rnd + 1 // 1-based index
+            };
+            
+            // Update UI
+            document.getElementById('topic-display').innerText = currentChallenge.topic;
+            document.getElementById('topic-counter').innerText = `#${currentChallenge.index}`;
+            
+            const constraintsHtml = t.c.map(c => 
+                `<li class="flex items-start gap-2"><span class="text-amber-500 mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 block"></span><span>${c}</span></li>`
+            ).join('');
+            document.getElementById('constraints-display').innerHTML = constraintsHtml;
+            document.getElementById('user-input').value = '';
+            
+            // Hide results
+            const resultArea = document.getElementById('result-area');
+            resultArea.classList.add('hidden');
+            resultArea.classList.remove('opacity-100');
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function askGemini() {
+            const userInput = document.getElementById('user-input').value.trim();
+            if (!userInput) {
+                const input = document.getElementById('user-input');
+                input.classList.add('ring-2', 'ring-red-400', 'translate-x-1');
+                setTimeout(() => input.classList.remove('ring-2', 'ring-red-400', 'translate-x-1'), 200);
+                return;
+            }
+
+            // Check Key
+            const currentKey = getEffectiveKey();
+            if (!currentKey) {
+                toggleSettings();
+                alert("Please enter your API Key first to use the app.");
+                return;
+            }
+
+            // UI Loading State
+            const btn = document.getElementById('submit-btn');
+            const loader = document.getElementById('loader');
+            const btnText = btn.querySelector('span');
+            const errorMsg = document.getElementById('error-msg');
+            
+            btn.disabled = true;
+            btnText.innerText = 'Analyzing...';
+            loader.classList.remove('hidden');
+            errorMsg.classList.add('hidden');
+
+            const systemPrompt = `
+                You are an expert IELTS Writing Coach. 
+                Task: Analyze the user's sentence based on the constraints: [${currentChallenge.constraints.join(', ')}].
+                
+                User Sentence: "${userInput}"
+                Topic: "${currentChallenge.topic}"
+
+                Instructions:
+                1. Score based on IELTS Band Descriptors.
+                2. Identify the SINGLE most critical issue.
+                3. Create an "Evolution Path":
+                   - Band 5-6: Corrected simple version.
+                   - Band 7: Version meeting constraints.
+                   - Band 8+: Advanced academic version.
+
+                STRICTLY output valid JSON only. Structure:
+                {
+                    "score": "Band 6.0",
+                    "issue": "Brief summary of weakness.",
+                    "evolution": [
+                        { "band": "Band 5-6", "label": "Corrected", "sentence": "...", "reason": "Correction explanation." },
+                        { "band": "Band 7", "label": "Target", "sentence": "...", "reason": "Explanation." },
+                        { "band": "Band 9", "label": "Expert", "sentence": "...", "reason": "Why is this advanced?" }
+                    ]
+                }
+            `;
+
+            try {
+                const result = await callGeminiWithBackoff(systemPrompt);
+                analysisResult = result;
+                renderResult(result);
+
+            } catch (err) {
+                console.error(err);
+                errorMsg.innerText = "Connection failed. Please try again.";
+                errorMsg.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btnText.innerText = 'Analyze Sentence';
+                loader.classList.add('hidden');
+            }
+        }
+
+        async function callGeminiWithBackoff(prompt) {
+            const delays = [1000, 2000, 4000];
+            let lastError;
+            const currentKey = getEffectiveKey(); // Get key dynamically
+
+            for (let i = 0; i <= delays.length; i++) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${currentKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(`API Error: ${response.status} ${errData.error?.message || ''}`);
+                    }
+                    
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!text) throw new Error("Empty response");
+
+                    return JSON.parse(text);
+
+                } catch (err) {
+                    lastError = err;
+                    // If 400/403 (Invalid Key), don't retry, just fail immediately
+                    if (err.message.includes('400') || err.message.includes('403')) {
+                        throw new Error("Invalid API Key. Please check settings.");
+                    }
+                    if (i < delays.length) await new Promise(r => setTimeout(r, delays[i]));
+                }
+            }
+            throw lastError;
+        }
+
+        // --- Rendering ---
+        function renderResult(data) {
+            document.getElementById('score-display').innerText = data.score.replace(/Band\s?/i, '');
+            document.getElementById('issue-display').innerText = data.issue;
+
+            const container = document.getElementById('evolution-container');
+            container.innerHTML = '';
+
+            data.evolution.forEach((item, index) => {
+                let colorClass = "bg-white border-slate-200";
+                let badgeClass = "bg-slate-100 text-slate-500";
+                let icon = "fa-check";
+
+                if (item.band.includes("7")) {
+                    colorClass = "bg-blue-50 border-blue-200 shadow-sm";
+                    badgeClass = "bg-blue-100 text-blue-700";
+                    icon = "fa-arrow-up";
+                } else if (item.band.includes("9") || item.band.includes("8")) {
+                    colorClass = "bg-purple-50 border-purple-200 shadow-sm";
+                    badgeClass = "bg-purple-100 text-purple-700";
+                    icon = "fa-star";
+                }
+
+                const card = `
+                    <div class="relative pl-8 animate-slide-up" style="animation-delay: ${index * 100}ms">
+                        <div class="absolute left-0 top-6 w-8 h-8 rounded-full bg-white border-2 border-slate-100 flex items-center justify-center z-10 text-slate-400 text-xs shadow-sm">
+                            ${index + 1}
+                        </div>
+                        <div class="p-5 rounded-xl border ${colorClass} transition hover:shadow-md">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="font-bold text-slate-800 text-sm">${item.band}</span>
+                                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-md ${badgeClass}">
+                                    <i class="fa-solid ${icon} mr-1"></i> ${item.label}
+                                </span>
+                            </div>
+                            <p class="font-serif text-lg text-slate-800 mb-3 leading-relaxed">"${item.sentence}"</p>
+                            <div class="text-xs text-slate-500 pt-3 border-t border-slate-200/60 flex items-start gap-2">
+                                <i class="fa-regular fa-lightbulb mt-0.5 text-amber-500"></i>
+                                <span>${item.reason}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+
+            const resultArea = document.getElementById('result-area');
+            resultArea.classList.remove('hidden');
+            void resultArea.offsetWidth; 
+            resultArea.classList.add('opacity-100');
+            
+            setTimeout(() => {
+                resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        function downloadLog() {
+            if (!analysisResult) return;
+            const date = new Date().toISOString().slice(0, 10);
+            const userSentence = document.getElementById('user-input').value;
+            let md = `# IELTS Practice Log (${date})\n\n`;
+            md += `**Topic:** ${currentChallenge.topic}\n`;
+            md += `**My Sentence:** ${userSentence}\n`;
+            md += `**Score:** ${analysisResult.score}\n`;
+            md += `**Main Issue:** ${analysisResult.issue}\n\n`;
+            md += `## Evolution Path\n\n`;
+            
+            analysisResult.evolution.forEach(e => {
+                md += `### ${e.band} (${e.label})\n`;
+                md += `> ${e.sentence}\n\n`;
+                md += `*Coach Note: ${e.reason}*\n\n---\n\n`;
+            });
+            
+            const blob = new Blob([md], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ielts-coach-log-${date}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // --- iOS Install Detection ---
+        function detectIOS() {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            const isStandalone = window.navigator.standalone; // True if launched from Home Screen
+
+            if (isIOS && !isStandalone) {
+                document.getElementById('ios-install-prompt').classList.remove('hidden');
+            }
+        }
+
+        // Initialize
+        window.onload = function() {
+            generateNewTopic();
+            detectIOS();
+        };
+    </script>
+</body>
+</html>
